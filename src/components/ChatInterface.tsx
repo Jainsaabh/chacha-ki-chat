@@ -2,8 +2,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
+import ApiKeyInput from './ApiKeyInput';
 import { getUncleResponse } from './SassyUncleResponses';
+import { generateUncleResponse } from '@/services/openaiService';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from '@/components/ui/use-toast';
 
 interface Message {
   id: string;
@@ -23,7 +26,16 @@ const ChatInterface = () => {
   ]);
   
   const [isTyping, setIsTyping] = useState(false);
+  const [apiKey, setApiKey] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Load API key from localStorage on component mount
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('openai_api_key');
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+    }
+  }, []);
 
   const addMessage = (text: string, isUser: boolean) => {
     const newMessage: Message = {
@@ -43,12 +55,33 @@ const ChatInterface = () => {
     // Show typing indicator
     setIsTyping(true);
     
-    // Simulate uncle thinking time
-    setTimeout(() => {
-      const uncleResponse = getUncleResponse(message);
+    try {
+      let uncleResponse: string;
+      
+      if (apiKey) {
+        // Use OpenAI API for dynamic responses
+        uncleResponse = await generateUncleResponse(message, apiKey);
+      } else {
+        // Fallback to pre-written responses
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+        uncleResponse = getUncleResponse(message);
+      }
+      
       addMessage(uncleResponse, false);
+    } catch (error) {
+      console.error('Error generating response:', error);
+      toast({
+        title: "Uncle is having trouble!",
+        description: "There was an issue generating a response. Using backup responses.",
+        variant: "destructive",
+      });
+      
+      // Fallback to pre-written responses on error
+      const fallbackResponse = getUncleResponse(message);
+      addMessage(fallbackResponse, false);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000); // Random delay between 1-2 seconds
+    }
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -71,9 +104,16 @@ const ChatInterface = () => {
           </div>
           <div>
             <h2 className="font-bold text-lg">Sassy Uncle AI</h2>
-            <p className="text-orange-100 text-sm">Your witty digital uncle • Always online</p>
+            <p className="text-orange-100 text-sm">
+              {apiKey ? 'Powered by OpenAI • Always witty' : 'Your witty digital uncle • Always online'}
+            </p>
           </div>
         </div>
+      </div>
+
+      {/* API Key Input */}
+      <div className="p-4 border-b border-gray-200">
+        <ApiKeyInput onApiKeySet={setApiKey} hasApiKey={!!apiKey} />
       </div>
 
       {/* Messages */}
